@@ -1,0 +1,442 @@
+
+1234567890abcdef
+0
+some-footer: some-value
+another-footer: another-value
+[blank line here]
+</pre></blockquote>
+
+<p>Note the blank line after the last footer.  The length of the
+text data is 42 bytes (1a&nbsp;+&nbsp;10, in hex), and the data itself is
+<b>abcdefghijklmnopqrstuvwxyz1234567890abcdef</b>.  The footers should be
+treated like headers, as if they were at the top of the response.
+
+<p>The chunks can contain any binary data, and may be much larger than the
+examples here.  The size-line parameters are rarely used, but you
+should at least ignore them correctly.  Footers are also rare, but might
+be appropriate for things like checksums or digital signatures.
+
+<p>For comparison, here's the equivalent to the above response, without
+using chunked encoding:
+<blockquote><pre>
+HTTP/1.1 200 OK
+Date: Fri, 31 Dec 1999 23:59:59 GMT
+Content-Type: text/plain
+Content-Length: 42
+some-footer: some-value
+another-footer: another-value
+
+abcdefghijklmnopqrstuvwxyz1234567890abcdef
+</pre></blockquote>
+
+<p><a href="#toc">Return to Table of Contents</a>
+
+
+<a name="http1.1c3"></a>
+<h3>Persistent Connections and the "Connection:&nbsp;close" Header</h3>
+<!-- sections 8.1, 14.10 -->
+
+<p>In HTTP&nbsp;1.0 and before, TCP connections are closed after each request
+and response, so each resource to be retrieved requires its own connection.
+Opening and closing TCP connections takes a substantial amount of CPU time,
+bandwidth, and memory.  In practice, most Web pages consist of several
+files on the same server, so much can be saved by allowing several requests
+and responses to be sent through a single <i>persistent connection</i>.
+
+<p>Persistent connections are the default in HTTP&nbsp;1.1, so nothing special
+is required to use them.  Just open a connection and send several requests
+in series (called <i>pipelining</i>), and read the responses in the same
+order as the requests were sent.  If you do this, be very careful to read
+the correct length of each response, to separate them correctly.
+
+<p>If a client includes the "<b><tt>Connection:&nbsp;close</tt></b>" header
+in the request, then the connection will be closed after the corresponding
+response.  <b>Use this if you don't support persistent connections</b>,
+or if you know a request will be the last on its connection.  Similarly,
+if a response contains this header, then the server will close the
+connection following that response, and the client shouldn't send any
+more requests through that connection.
+
+<p>A server might close the connection before all responses are sent, so
+a client must keep track of requests and resend them as needed.  When
+resending, don't pipeline the requests until you know the connection is
+persistent.  Don't pipeline at all if you know the server won't support
+persistent connections (like if it uses HTTP&nbsp;1.0, based on a previous
+response).
+
+<p><a href="#toc">Return to Table of Contents</a>
+
+
+<a name="http1.1c4"></a>
+<h3>The "100&nbsp;Continue" Response</h3>
+
+<p>During the course of an HTTP&nbsp;1.1 client sending a request to a server,
+the server might respond with an interim "<b><tt>100&nbsp;Continue</tt></b>"
+response.  This means the server has received the first part of the request,
+and can be used to aid communication over slow links.  In any case, all
+HTTP&nbsp;1.1 clients must handle the 100 response correctly (perhaps
+by just ignoring it).
+
+<p>The "<b><tt>100&nbsp;Continue</tt></b>" response is structured like
+any HTTP response, i.e. consists of a status line, optional headers,
+and a blank line.  Unlike other responses, it is always followed by
+another complete, final response.
+
+<p>So, further extending the last example, the full data that comes
+back from the server might consist of two responses in series, like
+
+<blockquote><pre>
+HTTP/1.1 100 Continue
+
+HTTP/1.1 200 OK
+Date: Fri, 31 Dec 1999 23:59:59 GMT
+Content-Type: text/plain
+Content-Length: 42
+some-footer: some-value
+another-footer: another-value
+
+abcdefghijklmnoprstuvwxyz1234567890abcdef
+</pre></blockquote>
+
+<p>To handle this, a simple HTTP&nbsp;1.1 client might read one response from the
+socket; if the status code is 100, discard the first response and read the
+next one instead.
+
+<p><a href="#toc">Return to Table of Contents</a>
+
+
+<p><hr><p>
+
+<a name="http1.1servers"></a>
+<h2>HTTP&nbsp;1.1 Servers</h2>
+
+<p>To comply with HTTP&nbsp;1.1, servers must:
+<ul>
+<li><a href="#http1.1s1">require the <b><tt>Host:</tt></b> header from
+    HTTP&nbsp;1.1 clients</a>
+<li><a href="#http1.1s2">accept absolute URL's in a request</a>
+<li><a href="#http1.1s3">accept requests with <i>chunked</i> data</a>
+<li><a href="#http1.1s4">either support <i>persistent connections</i>, or
+    include the "<b><tt>Connection:&nbsp;close</tt></b>" header with each
+    response</a>
+<li><a href="#http1.1s5">use the "<b><tt>100&nbsp;Continue</tt></b>" response
+    appropriately</a>
+<li><a href="#http1.1s6">include the <b><tt>Date:</tt></b> header in each
+    response</a>
+<li><a href="#http1.1s7">handle requests with <b><tt>If-Modified-Since:</tt></b>
+    or <b><tt>If-Unmodified-Since:</tt></b> headers</a>
+<li><a href="#http1.1s8">support at least the GET and HEAD methods</a>
+<li><a href="#http1.1s9">support HTTP&nbsp;1.0 requests</a>
+</ul>
+
+<p><a href="#toc">Return to Table of Contents</a>
+
+
+<a name="http1.1s1"></a>
+<h3>Requiring the Host: Header</h3>
+<!-- section 14.23 -->
+
+<p>Because of the urgency of implementing the new <b><tt>Host:</tt></b>
+header, servers are not allowed to tolerate HTTP&nbsp;1.1 requests without it.
+If a server receives such a request, it must return a
+"<b><tt>400&nbsp;Bad&nbsp;Request</tt></b>" response, like
+
+<blockquote><pre>
+HTTP/1.1 400 Bad Request
+Content-Type: text/html
+Content-Length: 111
+
+&lt;html&gt;&lt;body&gt;
+&lt;h2&gt;No Host: header received&lt;/h2&gt;
+HTTP&nbsp;1.1 requests must include the Host: header.
+&lt;/body&gt;&lt;/html&gt;
+</pre></blockquote>
+
+<p>This requirement applies <i>only</i> to clients using HTTP&nbsp;1.1, not
+any future version of HTTP.
+If the request uses an HTTP version later than 1.1, the server can
+accept an absolute URL instead of a <b><tt>Host:</tt></b> header (see
+next section).
+If the request uses HTTP&nbsp;1.0, the server may accept the request without
+any host identification.
+
+<p><a href="#toc">Return to Table of Contents</a>
+
+
+<a name="http1.1s2"></a>
+<h3>Accepting Absolute URL's</h3>
+<!-- section 5.1.2 -->
+
+<p>The <b><tt>Host:</tt></b> header is actually an interim solution to
+the problem of host identification.  In future versions of HTTP,
+requests will use an absolute URL instead of a pathname, like
+<blockquote><pre>
+GET http://www.somehost.com/path/file.html HTTP/1.2
+</pre></blockquote>
+
+<p>To enable this protocol transition, HTTP&nbsp;1.1 servers must accept this
+form of request, even though HTTP&nbsp;1.1 clients won't send them.  The server
+must still report an error if an HTTP&nbsp;1.1 client leaves out
+the <b><tt>Host:</tt></b> header, as described in the
+<a href="#http1.1s1">previous section</a>.
+
+<p><a href="#toc">Return to Table of Contents</a>
+
+
+<a name="http1.1s3"></a>
+<h3>Chunked Transfer-Encoding</h3>
+<!-- section 3.6 -->
+
+<p>Just as HTTP&nbsp;1.1 clients must accept chunked responses, servers must
+accept chunked requests (an unlikely scenario, but possible).  See the
+earlier section on
+<a href="#http1.1c2">HTTP&nbsp;1.1 Clients</a>
+for details of the chunked data format.
+
+<p>Servers aren't required to generate chunked messages; they just have to
+be able to receive them.
+
+<p><a href="#toc">Return to Table of Contents</a>
+
+
+<a name="http1.1s4"></a>
+<h3>Persistent Connections and the "Connection:&nbsp;close" Header</h3>
+<!-- sections 8.1, 14.10 -->
+
+<p>If an HTTP&nbsp;1.1 client sends multiple requests through a single connection,
+the server should send responses back in the same order as the requests--
+this is all it takes for a server to support persistent connections.
+
+<p>If a request includes the "<b><tt>Connection:&nbsp;close</tt></b>" header,
+that request is the final one for the connection and the server should
+close the connection after sending the response.  Also, the server should
+close an idle connection after some timeout period (can be anything;
+10 seconds is fine).
+
+<p>If you don't want to support persistent connections, include the
+"<b><tt>Connection:&nbsp;close</tt></b>" header in the response.  Use this
+header whenever you want to close the connection, even if not all requests
+have been fulfilled.  The header says that the connection will be closed
+after the current response, and a valid HTTP&nbsp;1.1 client will handle it
+correctly.
+
+<p><a href="#toc">Return to Table of Contents</a>
+
+
+<a name="http1.1s5"></a>
+<h3>Using the "100&nbsp;Continue" Response</h3>
+
+<p>As described in the section on
+<a href="#http1.1c4">HTTP&nbsp;1.1 Clients</a>,
+this response exists to help deal with slow links.
+
+<p>When an HTTP&nbsp;1.1 server receives the first line of an HTTP&nbsp;1.1
+(or later) request, it must respond with either
+"<b><tt>100&nbsp;Continue</tt></b>" or an error.  If it sends the
+"<b><tt>100&nbsp;Continue</tt></b>" response, it must also send another,
+final response, once the request has been processed.  The
+"<b><tt>100&nbsp;Continue</tt></b>" response requires no headers, but must
+be followed by the usual blank line, like:
+
+<blockquote><pre>
+HTTP/1.1 100 Continue
+[blank line here]
+[another HTTP response will go here]
+</pre></blockquote>
+
+<p>Don't send "<b><tt>100&nbsp;Continue</tt></b>" to HTTP&nbsp;1.0 clients,
+since they don't know how to handle it.
+
+<p><a href="#toc">Return to Table of Contents</a>
+
+
+<a name="http1.1s6"></a>
+<h3>The Date: Header</h3>
+<!-- section 14.19 -->
+
+<p>Caching is an important improvement in HTTP&nbsp;1.1, and can't work
+without timestamped responses.  So, servers must timestamp every response
+with a <b><tt>Date:</tt></b> header containing the current time, in the form
+<blockquote><pre>
+Date: Fri, 31 Dec 1999 23:59:59 GMT
+</pre></blockquote>
+
+<p>All responses except those with 100-level status (but including error
+responses) must include the <b><tt>Date:</tt></b> header.
+
+<p>All time values in HTTP use Greenwich Mean Time.
+
+<p><a href="#toc">Return to Table of Contents</a>
+
+
+<a name="http1.1s7"></a>
+<h3>Handling Requests with If-Modified-Since: or If-Unmodified-Since:
+    Headers</h3>
+<!-- sections 14.24 and 14.28 -->
+
+<p>To avoid sending resources that don't need to be sent, thus saving
+bandwidth, HTTP&nbsp;1.1 defines the <b><tt>If-Modified-Since:</b></tt> and
+<b><tt>If-Unmodified-Since:</b></tt> request headers.
+The former says "only send the resource if it has changed since this date";
+the latter says the opposite.  Clients aren't required to use them, but
+HTTP&nbsp;1.1 servers are required to honor requests that do use them.
+
+<p>Unfortunately, due to earlier HTTP versions,
+the date value may be in any of three possible formats:
+<blockquote><pre>
+If-Modified-Since:  Fri, 31 Dec 1999 23:59:59 GMT
+If-Modified-Since:  Friday, 31-Dec-99 23:59:59 GMT
+If-Modified-Since:  Fri Dec 31 23:59:59 1999
+</pre></blockquote>
+
+<p>Again, all time values in HTTP use Greenwich Mean Time (though try to be
+tolerant of non-GMT times).  If a date with a two-digit year seems to be more
+than 50 years in the future, treat it as being in the past-- this
+helps with the millennium bug.  In fact, do this with any date handling in
+HTTP&nbsp;1.1.
+
+<p><i>Although servers must accept all three date formats, HTTP&nbsp;1.1
+clients and servers must only generate the first kind.</i>
+
+<p>If the date in either of these headers is invalid, or is in the future,
+ignore the header.
+
+<p>If, without the header, the request would result in an unsuccessful
+(non-200-level) status code, ignore the header and send the non-200-level
+response.  In other words, only apply these headers when you know the
+resource would otherwise be sent.
+
+<p>The <b><tt>If-Modified-Since:</b></tt> header is used with a GET
+request.  If the requested resource has been modified since the given date,
+ignore the header and return the resource as you normally would.
+Otherwise, return a "<b><tt>304&nbsp;Not&nbsp;Modified</tt></b>" response,
+including the <b><tt>Date:</tt></b> header and no message body, like
+<blockquote><pre>
+HTTP/1.1 304 Not Modified
+Date: Fri, 31 Dec 1999 23:59:59 GMT
+[blank line here]
+</pre></blockquote>
+
+<p>The <b><tt>If-Unmodified-Since:</b></tt> header is similar, but can be
+used with any method.  If the requested resource has <i>not</i> been
+modified since the given date, ignore the header and return the resource as
+you normally would.  Otherwise, return a
+"<b><tt>412&nbsp;Precondition&nbsp;Failed</tt></b>" response, like
+<blockquote><pre>
+HTTP/1.1 412 Precondition Failed
+[blank line here]
+</pre></blockquote>
+
+<p><a href="#toc">Return to Table of Contents</a>
+
+
+<a name="http1.1s8"></a>
+<h3>Supporting the GET and HEAD methods</h3>
+<!-- section 5.1.1 -->
+
+<p>To comply with HTTP&nbsp;1.1, a server must support at least the GET and HEAD
+methods.  If you're handling CGI scripts, you should probably support the
+POST method too.
+
+<p>Four other methods (PUT, DELETE, OPTIONS, and TRACE) are defined in
+HTTP&nbsp;1.1, but are rarely used.  If a client requests a method you don't
+support, respond with "<b><tt>501&nbsp;Not&nbsp;Implemented</tt></b>", like
+<blockquote><pre>
+HTTP/1.1 501 Not Implemented
+[blank line here]
+</pre></blockquote>
+
+<p><a href="#toc">Return to Table of Contents</a>
+
+
+<a name="http1.1s9"></a>
+<h3>Supporting HTTP&nbsp;1.0 Requests</h3>
+
+<p>To be compatible with older browsers, HTTP&nbsp;1.1 servers must support
+HTTP&nbsp;1.0 requests.  In particular, when a request uses HTTP&nbsp;1.0
+(as identified in the initial request line),
+<ul>
+<li>don't require the <b><tt>Host:</b></tt> header, and
+<li>don't send the "<b><tt>100&nbsp;Continue</tt></b>" response.
+</ul>
+
+<p><a href="#toc">Return to Table of Contents</a>
+
+
+<p><hr><p>
+
+<a name="httpspec"></a>
+<h1>The HTTP Specification</h1>
+
+<p>If you plan to do anything elaborate in HTTP, read the
+official specification.  HTTP&nbsp;1.0 was never made an official
+Internet standard, but the <i>de facto</i> standard is described in
+<a href="http://www.ics.uci.edu/pub/ietf/http/rfc1945.html">RFC&nbsp;1945</a>.
+HTTP&nbsp;1.1 was developed by a
+<a href="http://www.ics.uci.edu/pub/ietf/http/">working group</a> of the
+<a href="http://www.ietf.org">IETF</a>, openly gathering input from many
+sources before reaching an approximate consensus.  The resulting specification
+is <a href="http://www.w3.org/Protocols/rfc2616/rfc2616.html">RFC 2616</a>,
+released in June 1999.  (As of late 2012, an update to the specification is in
+progress.)
+
+
+<p>These documents are available in various formats:
+<ul>
+<li><b>HTTP&nbsp;1.0 (RFC&nbsp;1945)--</b>
+    <a href="http://www.ics.uci.edu/pub/ietf/http/rfc1945.html">HTML</a>,
+    <a href="http://www.ics.uci.edu/pub/ietf/http/rfc1945.txt">text</a>, and
+    <a href="http://www.ics.uci.edu/pub/ietf/http/rfc1945.ps.gz">gzip'd PostScript</a>
+<li><b>HTTP&nbsp;1.1 (RFC&nbsp;2616)--</b>
+    <a href="http://www.w3.org/Protocols/rfc2616/rfc2616.html">HTML</a>,
+    <a href="http://www.w3.org/Protocols/rfc2616/rfc2616.txt">text</a>,
+    <a href="ftp://ftp.isi.edu/in-notes/rfc2616.ps">PostScript</a>, and
+    <a href="http://www.w3.org/Protocols/HTTP/1.1/rfc2616.pdf">PDF</a>.
+</ul>
+
+<p>Download and print the version you'll be using, for reference and
+bedtime reading.
+
+<p>The <a href="http://www.w3.org/">World Wide Web Consortium</a>
+has a
+<a href="http://www.w3.org/Protocols/">page devoted to HTTP</a>
+including news and updates, and a page listing
+<a href="http://www.w3.org/Protocols/Specs.html">HTTP specifications,
+drafts, and reports</a>.
+
+<p>Other RFC's you might find useful:
+<ul>
+<li><a href="http://www.cis.ohio-state.edu/htbin/rfc/rfc822.html">RFC 822</a>--</b>
+        structure of Internet text messages, including header fields
+<li><a href="http://www.cis.ohio-state.edu/htbin/rfc/rfc2396.html">RFC 2396</a>--
+        definition of URL/URI syntax (replaces
+        <a href="http://www.cis.ohio-state.edu/htbin/rfc/rfc1738.html">RFC 1738</a>
+        and
+        <a href="http://www.cis.ohio-state.edu/htbin/rfc/rfc1808.html">RFC 1808</a>)
+
+<li><a href="http://www.cis.ohio-state.edu/htbin/rfc/rfc1521.html">RFC 1521</a>--</b>
+        definition of MIME and of MIME types
+</ul>
+
+<p><a href="#toc">Return to Table of Contents</a>
+
+
+<p><hr>
+
+&copy; 1997, 2012
+<a href="mailto:james@jmarshall.com?subject=HTTP Made Really Easy">James Marshall</a>
+(comments welcome)
+
+<p>
+<table width="100%"><tr>
+    <td><i>Last modified: December 10, 2012</i></td>
+    <td align=right><i>http://www.jmarshall.com/easy/http/</i></td>
+</tr></table>
+
+
+<p>
+
+</body>
+</html>
+
+U:\>
